@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+wrangler.jsonc
+wrangler.toml
+worker-configuration.d.ts
+.serena/

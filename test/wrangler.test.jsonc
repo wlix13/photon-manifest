@@ -1,0 +1,27 @@
+// Bindings used by vitest-pool-workers; mirrors wrangler.example.jsonc.
+{
+  "name": "photon-manifest-test",
+  "main": "../src/index.ts",
+  "compatibility_date": "2026-05-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "photon-manifest-test",
+      "database_id": "photon-manifest-test"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PACKAGES",
+      "bucket_name": "photon-manifest-test"
+    }
+  ],
+  "vars": {
+    "ADMIN_USERNAME": "admin",
+    "ADMIN_PASSWORD": "admin-password",
+    "PUBLIC_READ": "false",
+    // Low iteration count keeps password-based tests fast.
+    "PBKDF2_ITERATIONS": "1000"
+  }
+}

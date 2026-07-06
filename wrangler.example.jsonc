@@ -1,0 +1,90 @@
+// Copy to wrangler.jsonc and fill in your database_id / bucket_name.
+// The real wrangler.jsonc is gitignored so account-specific ids stay local.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "photon-manifest",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-07",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "observability": {
+    "enabled": true,
+  },
+
+  "env": {
+    // Production - `pnpm run deploy` (wrangler deploy --env production)
+    "production": {
+      // Custom Cloudflare domain for worker (required for edge caching)
+      // "routes": [{ "pattern": "pypi.example.com", "custom_domain": true }],
+
+      // set to false to disable the default Worker domain (applicable only if custom domain is used instead)
+      "workers_dev": true,
+
+      // Relational data: users, API tokens, uploaded file records.
+      // Create with: wrangler d1 create photon-manifest
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "photon-manifest",
+          "database_id": "REPLACE_WITH_DATABASE_ID",
+        },
+      ],
+
+      // Package files (wheels / sdists) and extracted wheel METADATA.
+      // Create with: wrangler r2 bucket create photon-manifest-packages
+      "r2_buckets": [
+        {
+          "binding": "PACKAGES",
+          "bucket_name": "photon-manifest-packages",
+        },
+      ],
+
+      "vars": {
+        // "true" allows unauthenticated package reads (/simple and /files).
+        "PUBLIC_READ": "false",
+        // PBKDF2-SHA256 iterations for password hashing. Drop to ~10000 on the
+        // free plan (10 ms CPU limit); keep 100000+ on paid.
+        "PBKDF2_ITERATIONS": "100000",
+        // Optional: reject uploads larger than this many MiB (platform caps at 100 MB).
+        "MAX_UPLOAD_MB": "20",
+        // Edge caching of downloads is on by default (requires custom domain above);
+        // set to "off" to disable.
+        "EDGE_CACHE": "on",
+      },
+
+      // Secrets (bootstrap admin, not stored in D1):
+      //   wrangler secret put ADMIN_USERNAME --env production
+      //   wrangler secret put ADMIN_PASSWORD --env production
+    },
+
+    // Dev - For local dev using `npx wrangler dev`
+    "dev": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "photon-manifest-dev",
+          "database_id": "photon-manifest-dev",
+        },
+      ],
+
+      "r2_buckets": [
+        {
+          "binding": "PACKAGES",
+          "bucket_name": "photon-manifest-dev",
+        },
+      ],
+
+      "vars": {
+        "PUBLIC_READ": "false",
+        // Low iteration count keeps local requests fast.
+        "PBKDF2_ITERATIONS": "10000",
+        "MAX_UPLOAD_MB": "20",
+        // No custom domain locally, so edge caching would be a no-op anyway.
+        "EDGE_CACHE": "off",
+      },
+
+      // For local dev put ADMIN_USERNAME / ADMIN_PASSWORD in .dev.vars
+      // (see .dev.vars.example).
+    },
+  },
+}

@@ -1,0 +1,28 @@
+{
+  "name": "photon-manifest",
+  "version": "0.1.0",
+  "description": "Private PyPI-compatible package index on Cloudflare Workers (R2 + D1)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev --env dev",
+    "deploy": "wrangler deploy --minify --env production",
+    "db:migrate": "wrangler d1 migrations apply photon-manifest --remote --env production",
+    "db:migrate:local": "wrangler d1 migrations apply photon-manifest-dev --local --env dev",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit --project test/tsconfig.json"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.16.4",
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.6",
+    "wrangler": "^4.90.1"
+  },
+  "packageManager": "pnpm@11.5.2"
+}

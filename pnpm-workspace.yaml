@@ -1,0 +1,5 @@
+# Native deps that are allowed to run their install scripts.
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true

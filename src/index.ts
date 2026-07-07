@@ -3,6 +3,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { AppEnv } from "./auth";
 import { HttpError } from "./errors";
 import { adminRoutes } from "./routes/admin";
+import { dashboardRoutes } from "./routes/dashboard";
 import { fileRoutes } from "./routes/files";
 import { simpleRoutes } from "./routes/simple";
 import { uploadRoutes } from "./routes/upload";
@@ -27,6 +28,7 @@ app.all("/", (c) => c.json({ message: "Forbidden." }, 403));
 app.route("/simple", simpleRoutes);
 app.route("/legacy", uploadRoutes);
 app.route("/files", fileRoutes);
+app.route("/admin", dashboardRoutes);
 app.route("/api", adminRoutes);
 
 export default app;

@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../auth";
 import { assertProjectAccess, requireAuth } from "../auth";
-import { deleteFileRow, insertFile } from "../db";
-import { BadRequest, HttpError } from "../errors";
+import { deleteFileRow, getFile, insertFile } from "../db";
+import { BadRequest, Conflict, HttpError } from "../errors";
 import { extractWheelMetadata } from "../metadata";
 import { isValidProjectName, normalizeName, parseDistFilename, versionsEquivalent } from "../names";
 import { fileKey, metadataKey } from "../storage";
@@ -82,19 +82,27 @@ uploadRoutes.post("/", async (c) => {
 
   // Insert first: the filename's UNIQUE constraint is the concurrency lock,
   // so a racing duplicate upload can never overwrite stored bytes.
-  await insertFile(c.env.DB, {
-    filename: content.name,
-    project,
-    displayName: name,
-    version,
-    filetype: parsed.filetype,
-    requiresPython: field(form, "requires_python") ?? null,
-    sha256,
-    md5,
-    size: bytes.length,
-    metadataSha256,
-    uploadedBy: auth.username,
-  });
+  try {
+    await insertFile(c.env.DB, {
+      filename: content.name,
+      project,
+      displayName: name,
+      version,
+      filetype: parsed.filetype,
+      requiresPython: field(form, "requires_python") ?? null,
+      sha256,
+      md5,
+      size: bytes.length,
+      metadataSha256,
+      uploadedBy: auth.username,
+    });
+  } catch (err) {
+    // Identical re-upload succeeds as no-op, keeps retried publishes safe.
+    if (err instanceof Conflict && (await getFile(c.env.DB, content.name))?.sha256 === sha256) {
+      return c.text("");
+    }
+    throw err;
+  }
 
   try {
     await c.env.PACKAGES.put(fileKey(project, content.name), bytes, {

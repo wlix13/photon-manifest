@@ -16,16 +16,18 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Builds a minimal but structurally valid wheel for `distribution` (underscored). */
+/** Builds a minimal but structurally valid wheel for `distribution` (underscored), `summary` varies the bytes. */
 export function buildWheel(
   distribution: string,
   version: string,
+  summary = "",
 ): { filename: string; bytes: Uint8Array } {
   const distInfo = `${distribution}-${version}.dist-info`;
   const bytes = zipSync({
     [`${distribution}/__init__.py`]: strToU8(""),
     [`${distInfo}/METADATA`]: strToU8(
-      `Metadata-Version: 2.1\nName: ${distribution}\nVersion: ${version}\n`,
+      `Metadata-Version: 2.1\nName: ${distribution}\nVersion: ${version}\n` +
+        (summary ? `Summary: ${summary}\n` : ""),
     ),
     [`${distInfo}/WHEEL`]: strToU8("Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n"),
     [`${distInfo}/RECORD`]: strToU8(""),

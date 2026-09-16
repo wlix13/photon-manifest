@@ -74,9 +74,16 @@ describe("upload and simple API", () => {
     expect(await metadata.text()).toContain("Name: test_package");
   });
 
-  it("rejects duplicate filenames with 409", async () => {
+  it("treats identical re-upload as no-op", async () => {
     await uploadFile(ADMIN, WHEEL, { name: "test-package", version: "1.0.0" });
     const again = await uploadFile(ADMIN, WHEEL, { name: "test-package", version: "1.0.0" });
+    expect(again.status).toBe(200);
+  });
+
+  it("rejects different bytes under existing filename with 409", async () => {
+    await uploadFile(ADMIN, WHEEL, { name: "test-package", version: "1.0.0" });
+    const rebuilt = buildWheel("test_package", "1.0.0", "rebuilt");
+    const again = await uploadFile(ADMIN, rebuilt, { name: "test-package", version: "1.0.0" });
     expect(again.status).toBe(409);
   });
 

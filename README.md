@@ -113,7 +113,7 @@ password = spypi-...
 
 ## Behavior worth knowing
 
-- **Filenames are immutable** - re-uploading an existing filename returns 409; delete the file first if you really need to replace it.
+- **Filenames are immutable** - re-uploading the identical file is no-op 200, so retried publishes are safe; different bytes under existing filename return 409, delete file first if you really need to replace it.
 - Uploads verify the client-provided `sha256_digest` against the received bytes before anything is stored, and R2 re-verifies the digest on write.
 - Project-scoped tokens are restricted for uploads/deletes/yanks; reads are allowed registry-wide (matching PyPI's upload-token behavior).
 - User, token and project management lives under `/api/*` - see `whoami`, `users`, `tokens` and `projects`. `GET /api/whoami` is the quickest way to confirm which identity and role your credentials resolve to.

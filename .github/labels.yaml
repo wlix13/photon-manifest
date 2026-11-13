@@ -1,0 +1,82 @@
+# Core Labels
+- name: "bug"
+  description: "Something is not working"
+  color: "d73a4a"
+
+- name: "feature"
+  description: "New feature or request"
+  color: "a2eeef"
+
+- name: "enhancement"
+  description: "Improvement to existing functionality"
+  color: "0e8a16"
+
+- name: "docs"
+  description: "Documentation updates"
+  color: "0075ca"
+
+- name: "breaking-change"
+  description: "Breaking changes"
+  color: "b60205"
+
+- name: "refactor"
+  description: "Code refactoring"
+  color: "cccccc"
+
+- name: "security"
+  description: "Security-related changes"
+  color: "ee0701"
+
+- name: "ci-cd"
+  description: "CI/CD and automation"
+  color: "0052cc"
+
+- name: "tests"
+  description: "Testing"
+  color: "e99695"
+
+- name: "dependencies"
+  description: "Changes to dependencies"
+  color: "a569bd"
+
+# Manifest-specific labels
+- name: "index"
+  description: "Package index and metadata"
+  color: "1d76db"
+
+- name: "upload"
+  description: "Package upload and publishing"
+  color: "fbca04"
+
+- name: "cache"
+  description: "Edge caching logic"
+  color: "bfd4f2"
+
+- name: "auth"
+  description: "Authentication and access control"
+  color: "5319e7"
+
+- name: "migrations"
+  description: "Database migrations (D1)"
+  color: "d4c5f9"
+
+# PR Labels
+- name: "duplicate"
+  description: "This issue or PR already exists"
+  color: "cfd3d7"
+
+- name: "invalid"
+  description: "This doesn't seem right"
+  color: "e4e669"
+
+- name: "wontfix"
+  description: "This will not be worked on"
+  color: "ffffff"
+
+- name: "javascript"
+  description: "JavaScript/TypeScript dependencies"
+  color: "f1e05a"
+
+- name: "github_actions"
+  description: "GitHub Actions dependencies"
+  color: "2671e5"

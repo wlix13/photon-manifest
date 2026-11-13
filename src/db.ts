@@ -51,12 +51,29 @@ export interface FileRow {
   yanked_reason: string | null;
 }
 
+/** `projects` table row */
+export interface ProjectRow {
+  name: string;
+  public: number;
+  created_at: string;
+}
+
 /** Aggregate row for the project listing API. */
 export interface ProjectSummary {
   project: string;
   files: number;
   versions: number;
-  last_upload: string;
+  last_upload: string | null;
+  public: boolean;
+}
+
+/** D1 row: public is 0/1 */
+interface ProjectSummaryRow {
+  project: string;
+  files: number;
+  versions: number;
+  last_upload: string | null;
+  public: number;
 }
 
 /** Rethrows D1 UNIQUE-constraint failures as a domain Conflict. */
@@ -175,14 +192,16 @@ export async function listProjectNames(db: D1Database): Promise<string[]> {
   return result.results.map((row) => row.project);
 }
 
-export async function listProjectSummaries(db: D1Database): Promise<ProjectSummary[]> {
-  const result = await db
-    .prepare(
-      `SELECT project, COUNT(*) AS files, COUNT(DISTINCT version) AS versions, MAX(uploaded_at) AS last_upload
-       FROM files GROUP BY project ORDER BY project`,
-    )
-    .all<ProjectSummary>();
-  return result.results;
+export async function listProjectSummaries(db: D1Database, project?: string): Promise<ProjectSummary[]> {
+  const sql =
+    `SELECT f.project, COUNT(*) AS files, COUNT(DISTINCT f.version) AS versions, MAX(f.uploaded_at) AS last_upload, CAST(COALESCE(p.public, 0) AS INTEGER) AS public
+     FROM files f
+     LEFT JOIN projects p ON p.name = f.project`
+    + (project === undefined ? "" : ` WHERE f.project = ?`)
+    + ` GROUP BY f.project, p.public ORDER BY f.project`;
+  const statement = project === undefined ? db.prepare(sql) : db.prepare(sql).bind(project);
+  const result = await statement.all<ProjectSummaryRow>();
+  return result.results.map((row) => ({ ...row, public: Boolean(row.public) }));
 }
 
 export async function filesByProject(db: D1Database, project: string): Promise<FileRow[]> {
@@ -197,8 +216,8 @@ export async function getFile(db: D1Database, filename: string): Promise<FileRow
   return db.prepare("SELECT * FROM files WHERE filename = ?").bind(filename).first<FileRow>();
 }
 
-/** Inserts a file record; throws Conflict when the filename is already taken. */
-export async function insertFile(
+/** file row and project row in one batch; Conflict when filename taken */
+export async function insertFileWithProject(
   db: D1Database,
   file: {
     filename: string;
@@ -215,14 +234,13 @@ export async function insertFile(
   },
 ): Promise<void> {
   try {
-    await db
-      .prepare(
+    await db.batch([
+      db.prepare(
         `INSERT INTO files
            (filename, project, display_name, version, filetype, requires_python,
             sha256, md5, size, metadata_sha256, uploaded_by)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
+      ).bind(
         file.filename,
         file.project,
         file.displayName,
@@ -234,23 +252,41 @@ export async function insertFile(
         file.size,
         file.metadataSha256,
         file.uploadedBy,
-      )
-      .run();
+      ),
+      db.prepare("INSERT OR IGNORE INTO projects (name) VALUES (?)").bind(file.project),
+    ]);
   } catch (err) {
     rethrowUnique(err, `File '${file.filename}' already exists. Delete it first to replace it.`);
   }
 }
 
+/** deletes one file row */
 export async function deleteFileRow(db: D1Database, filename: string): Promise<boolean> {
   const result = await db.prepare("DELETE FROM files WHERE filename = ?").bind(filename).run();
   return result.meta.changes > 0;
+}
+
+/** delete file row; drop project row once last file gone; one batch */
+export async function deleteFileRowWithVisibilityReset(
+  db: D1Database,
+  filename: string,
+  project: string,
+): Promise<boolean> {
+  const result = await db.batch([
+    db.prepare("DELETE FROM files WHERE filename = ?").bind(filename),
+    db.prepare("DELETE FROM projects WHERE name = ? AND NOT EXISTS (SELECT 1 FROM files WHERE project = ?)").bind(project, project),
+  ]);
+  return (result[0]?.meta?.changes ?? 0) > 0;
 }
 
 /** Deletes all rows of a project, returning the removed rows for R2 cleanup. */
 export async function deleteProjectRows(db: D1Database, project: string): Promise<FileRow[]> {
   const rows = await filesByProject(db, project);
   if (rows.length > 0) {
-    await db.prepare("DELETE FROM files WHERE project = ?").bind(project).run();
+    await db.batch([
+      db.prepare("DELETE FROM files WHERE project = ?").bind(project),
+      db.prepare("DELETE FROM projects WHERE name = ?").bind(project),
+    ]);
   }
   return rows;
 }
@@ -266,4 +302,30 @@ export async function setYanked(
     .bind(yanked ? 1 : 0, yanked ? reason : null, filename)
     .run();
   return result.meta.changes > 0;
+}
+
+/** project row by name */
+export async function getProject(db: D1Database, name: string): Promise<ProjectRow | null> {
+  return db.prepare("SELECT * FROM projects WHERE name = ?").bind(name).first<ProjectRow>();
+}
+
+/** set public flag on project with files; returns changed row count */
+export async function setProjectVisibility(
+  db: D1Database,
+  name: string,
+  isPublic: boolean,
+): Promise<number> {
+  const result = await db
+    .prepare("UPDATE projects SET public = ? WHERE name = ? AND EXISTS (SELECT 1 FROM files WHERE project = ?)")
+    .bind(isPublic ? 1 : 0, name, name)
+    .run();
+  return result.meta.changes;
+}
+
+/** public projects with at least one file */
+export async function listPublicProjectNames(db: D1Database): Promise<string[]> {
+  const result = await db
+    .prepare("SELECT DISTINCT p.name FROM projects p JOIN files f ON f.project = p.name WHERE p.public = 1 ORDER BY p.name")
+    .all<{ name: string }>();
+  return result.results.map((row) => row.name);
 }

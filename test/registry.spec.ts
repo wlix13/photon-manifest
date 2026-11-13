@@ -15,10 +15,14 @@ describe("authentication", () => {
     expect((await get("/")).status).toBe(403);
   });
 
-  it("challenges unauthenticated requests", async () => {
-    const response = await get("/simple/");
-    expect(response.status).toBe(401);
-    expect(response.headers.get("WWW-Authenticate")).toContain("Basic");
+  it("allows anonymous root index (empty when no public projects)", async () => {
+    const seed = await uploadFile(ADMIN, buildWheel("hidden_pkg", "1.0.0"), { name: "hidden-pkg", version: "1.0.0" });
+    expect([200, 201]).toContain(seed.status);
+
+    const response = await get("/simple/", { accept: JSON_ACCEPT });
+    expect(response.status).toBe(200);
+    const listing = (await response.json()) as { meta: object; projects: { name: string }[] };
+    expect(listing.projects).toEqual([]);
   });
 
   it("rejects invalid credentials", async () => {
@@ -227,8 +231,8 @@ describe("download caching", () => {
     const miss = await get(url, { auth: ADMIN });
     expect(miss.status).toBe(200);
     expect(miss.headers.get("X-Registry-Cache")).toBe("MISS");
-    // The edge TTL Cache-Control must not leak to clients.
-    expect(miss.headers.get("Cache-Control")).toBeNull();
+    // clients get Cache-Control: private; edge TTL stays server-side
+    expect(miss.headers.get("Cache-Control")).toBe("private");
     expect(new Uint8Array(await miss.arrayBuffer())).toEqual(wheel.bytes);
 
     // Delete the object straight from R2 so a subsequent 200 can only be a cache hit.

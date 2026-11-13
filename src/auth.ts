@@ -1,8 +1,8 @@
 import type { MiddlewareHandler } from "hono";
 import type { Env } from "./env";
-import type { Role } from "./db";
+import type { Role, ProjectRow } from "./db";
 import { findTokenByHash, getUser, touchToken } from "./db";
-import { Forbidden, Unauthorized } from "./errors";
+import { Forbidden, NotFound, Unauthorized } from "./errors";
 
 /** Hono environment: bindings plus the per-request auth variable. */
 export type AppEnv = { Bindings: Env; Variables: { auth: AuthContext } };
@@ -15,6 +15,8 @@ export interface AuthContext {
   project: string | null;
   /** True when authenticated with an API token rather than a password. */
   viaToken: boolean;
+  /** true when request has no Authorization header */
+  anonymous: boolean;
 }
 
 /** Structural stand-in for ExecutionContext (Hono and workers-types disagree). */
@@ -34,6 +36,36 @@ export function roleAtLeast(role: Role, required: Role): boolean {
 /** The lower of two roles (a token never exceeds its owner's current role). */
 export function minRole(a: Role, b: Role): Role {
   return ROLE_ORDER[a] <= ROLE_ORDER[b] ? a : b;
+}
+
+export function assertProjectReadable(
+  env: Env,
+  name: string,
+  project: ProjectRow | null,
+  auth: AuthContext | null,
+): void {
+  if (auth !== null && auth.project !== null) {
+    if (project === null) {
+      if (auth.project === name) throw new NotFound("Project");
+      throw new Forbidden(`This token is scoped to project '${auth.project}'.`);
+    }
+    if (auth.project !== project.name) {
+      throw new Forbidden(`This token is scoped to project '${auth.project}'.`);
+    }
+    return;
+  }
+
+  if (env.PUBLIC_READ === "true") return;
+
+  if (project === null) {
+    if (auth === null || auth.anonymous) throw new Unauthorized();
+    throw new NotFound("Project");
+  }
+
+  if (auth === null || auth.anonymous) {
+    if (project.public === 1) return;
+    throw new Unauthorized();
+  }
 }
 
 /** Extracts the username/password pair from a Basic Authorization header. */
@@ -143,6 +175,7 @@ async function authenticateToken(
     role: minRole(row.token_role, row.user_role),
     project: row.project,
     viaToken: true,
+    anonymous: false,
   };
 }
 
@@ -167,7 +200,7 @@ export async function authenticate(
     ]);
     if (userOk) {
       return passOk
-        ? { username: credentials.username, role: "admin", project: null, viaToken: false }
+        ? { username: credentials.username, role: "admin", project: null, viaToken: false, anonymous: false }
         : null;
     }
   }
@@ -175,7 +208,7 @@ export async function authenticate(
   const user = await getUser(env.DB, credentials.username);
   if (!user) return null;
   if (!(await verifyPassword(credentials.password, user.password_hash))) return null;
-  return { username: user.username, role: user.role, project: null, viaToken: false };
+  return { username: user.username, role: user.role, project: null, viaToken: false, anonymous: false };
 }
 
 /** Middleware: authenticates the request and enforces a minimum role. */
@@ -191,7 +224,7 @@ export function requireAuth(minimum: Role): MiddlewareHandler<AppEnv> {
     if (c.req.raw.headers.get("Authorization") === null) {
       // Anonymous access is allowed only for reads on a public registry.
       if (minimum === "read" && c.env.PUBLIC_READ === "true") {
-        c.set("auth", { username: "anonymous", role: "read", project: null, viaToken: false });
+        c.set("auth", { username: "anonymous", role: "read", project: null, viaToken: false, anonymous: true });
         return next();
       }
       throw new Unauthorized();
@@ -213,3 +246,23 @@ export function assertProjectAccess(auth: AuthContext, project: string): void {
     throw new Forbidden(`This token is scoped to project '${auth.project}'.`);
   }
 }
+
+export const optionalAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
+  let ctx: WaitUntilContext | undefined;
+  try {
+    ctx = c.executionCtx;
+  } catch {
+    ctx = undefined;
+  }
+
+  const authHeader = c.req.raw.headers.get("Authorization");
+  if (authHeader === null) {
+    c.set("auth", { username: "anonymous", role: "read", project: null, viaToken: false, anonymous: true });
+    return next();
+  }
+
+  const auth = await authenticate(c.env, c.req.raw, ctx);
+  if (!auth) throw new Unauthorized("Invalid credentials.");
+  c.set("auth", auth);
+  return next();
+};

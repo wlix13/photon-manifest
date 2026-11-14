@@ -5,7 +5,6 @@
   "name": "photon-manifest",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-14",
-  "compatibility_flags": ["nodejs_compat"],
 
   "observability": {
     "enabled": true,
@@ -14,6 +13,7 @@
   "env": {
     // Production - `pnpm run deploy` (wrangler deploy --env production)
     "production": {
+      "name": "photon-manifest",
       // Custom Cloudflare domain for worker (required for edge caching)
       // "routes": [{ "pattern": "pypi.example.com", "custom_domain": true }],
 

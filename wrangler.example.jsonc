@@ -4,7 +4,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "photon-manifest",
   "main": "src/index.ts",
-  "compatibility_date": "2026-07-07",
+  "compatibility_date": "2026-11-14",
   "compatibility_flags": ["nodejs_compat"],
 
   "observability": {

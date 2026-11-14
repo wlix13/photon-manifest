@@ -10,7 +10,7 @@ import {
 import type { Role } from "../db";
 import {
   createUser,
-  deleteFileRow,
+  deleteFileRowWithVisibilityReset,
   deleteProjectRows,
   deleteToken,
   deleteUser,
@@ -21,6 +21,7 @@ import {
   listProjectSummaries,
   listTokens,
   listUsers,
+  setProjectVisibility,
   setYanked,
   updatePassword,
 } from "../db";
@@ -211,11 +212,31 @@ adminRoutes.delete("/tokens/:id", requireAuth("read"), async (c) => {
 // --- projects and files -----------------------------------------------------
 
 adminRoutes.get("/projects", requireAuth("read"), async (c) => {
+  const auth = c.get("auth");
+  if (auth.project !== null) {
+    return c.json(await listProjectSummaries(c.env.DB, auth.project));
+  }
   return c.json(await listProjectSummaries(c.env.DB));
+});
+
+adminRoutes.put("/projects/:name/visibility", requireAuth("admin"), async (c) => {
+  const auth = c.get("auth");
+  const project = normalizeName(c.req.param("name"));
+  assertProjectAccess(auth, project);
+  const body = await readJson(c.req.raw);
+  if (typeof body !== "object" || body === null) {
+    throw new BadRequest("Expected a JSON object body.");
+  }
+  const isPublic = body.public;
+  if (typeof isPublic !== "boolean") throw new BadRequest("Field 'public' must be a boolean.");
+  const changes = await setProjectVisibility(c.env.DB, project, isPublic);
+  if (changes === 0) throw new NotFound(`Project '${project}'`);
+  return c.json({ name: project, public: isPublic });
 });
 
 adminRoutes.get("/projects/:name", requireAuth("read"), async (c) => {
   const project = normalizeName(c.req.param("name"));
+  assertProjectAccess(c.get("auth"), project);
   const files = await filesByProject(c.env.DB, project);
   if (files.length === 0) throw new NotFound(`Project '${project}'`);
   return c.json({ project, files });
@@ -251,7 +272,7 @@ async function loadProjectFile(
 adminRoutes.delete("/projects/:name/files/:filename", requireAuth("write"), async (c) => {
   const auth = c.get("auth");
   const { project, filename } = await loadProjectFile(c, auth, c.req.param("name"), c.req.param("filename"));
-  await deleteFileRow(c.env.DB, filename);
+  await deleteFileRowWithVisibilityReset(c.env.DB, filename, project);
   await deleteFileObjects(c.env.PACKAGES, project, filename);
   await purgeCachedFile(c.env, new URL(c.req.url), project, filename);
   return c.json({ deleted: filename });

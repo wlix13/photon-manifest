@@ -61,6 +61,38 @@ Roles: `read` (install packages) < `write` (upload, yank, delete own files)
 < `admin` (manage users and projects). Set `PUBLIC_READ = "true"` to allow
 anonymous installs while keeping uploads authenticated.
 
+### Per-project public access
+
+Projects can be marked `public`, which makes them installable without credentials while the rest of the registry stays private.
+`PUBLIC_READ=true` still makes everything anonymous-readable and takes precedence over the per-project flag.
+Listing projects is open to any `read` role; changing visibility requires `admin`.
+
+```bash
+BASE=https://pypi.example.com
+
+# List projects with visibility and stats
+curl -u admin $BASE/api/projects
+# => [{"project":"my-pkg","files":3,"versions":2,"last_upload":"...","public":true},...]
+
+# Make project public
+curl -u admin -X PUT $BASE/api/projects/my-pkg/visibility \
+  -H 'Content-Type: application/json' \
+  -d '{"public":true}'
+# => {"name":"my-pkg","public":true}
+
+# Make project private again
+curl -u admin -X PUT $BASE/api/projects/my-pkg/visibility \
+  -H 'Content-Type: application/json' \
+  -d '{"public":false}'
+```
+
+A project has no visibility row until its first upload, and deleting a project's last file removes the project, so a re-upload starts private.
+Anonymous clients see only public projects on the root index (`/simple/`) unless `PUBLIC_READ=true`, and a project-scoped token's root index lists only its own project.
+Anonymous requests get **401** with a Basic challenge (so pip and keyring prompt) unless the project is public or `PUBLIC_READ=true`, whether or not the name exists.
+After credentials, an unknown project is 404.
+A project-scoped token reading any other project is 403, even when the name does not exist - that avoids enumeration; on its own missing name it is 404.
+The `public` field in JSON responses is a boolean.
+
 ### Manage users and tokens
 
 ```bash
@@ -115,7 +147,7 @@ password = spypi-...
 
 - **Filenames are immutable** - re-uploading the identical file is no-op 200, so retried publishes are safe; different bytes under existing filename return 409, delete file first if you really need to replace it.
 - Uploads verify the client-provided `sha256_digest` against the received bytes before anything is stored, and R2 re-verifies the digest on write.
-- Project-scoped tokens are restricted for uploads/deletes/yanks; reads are allowed registry-wide (matching PyPI's upload-token behavior).
+- Project-scoped tokens are restricted to their own project for reads, uploads, deletes and yanks.
 - User, token and project management lives under `/api/*` - see `whoami`, `users`, `tokens` and `projects`. `GET /api/whoami` is the quickest way to confirm which identity and role your credentials resolve to.
 
 ## Limits

@@ -39,6 +39,11 @@
         },
       ],
 
+      // Workers Caching: set CACHE_ENABLED to activate.
+      // "cache": { "enabled": ${CACHE_ENABLED} },
+
+      // "placement": { "mode": "${PLACEMENT_MODE}" },
+
       "vars": {
         // "true" allows unauthenticated package reads (/simple and /files).
         "PUBLIC_READ": "false",
@@ -49,7 +54,7 @@
         "MAX_UPLOAD_MB": "20",
         // Edge caching of downloads is on by default (requires custom domain above);
         // set to "off" to disable.
-        "EDGE_CACHE": "on",
+        "EDGE_CACHE": "${EDGE_CACHE:-on}",
       },
 
       // Secrets (bootstrap admin, not stored in D1):

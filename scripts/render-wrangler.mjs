@@ -4,7 +4,8 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const PLACEHOLDER = /\$\{([A-Z][A-Z0-9_]*)\}/g;
+const PLACEHOLDER = /\$\{([A-Z][A-Z0-9_]*)(?::-([^}]*))?\}/g;
+const COMMENT = /^(\s*)\/\/\s?(.*)$/;
 
 function usage() {
   return `Usage: render-wrangler.mjs [options]
@@ -13,7 +14,12 @@ Options:
   --template <path>   Template file (default: wrangler.example.jsonc)
   --out <path>        Output file (default: wrangler.jsonc)
   --check             Render and report, write nothing
-  --help              Show this help and exit`;
+  --help              Show this help and exit
+
+\${VAR} needs a value and fails the render without one. \${VAR:-fallback} uses the
+fallback. A commented line whose placeholders all resolve is activated; a comment
+that cannot resolve stays a comment.
+`;
 }
 
 const args = process.argv.slice(2);
@@ -24,7 +30,7 @@ let check = false;
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
   if (arg === '--help') {
-    process.stdout.write(usage() + '\n');
+    process.stdout.write(usage());
     process.exit(0);
   }
   if (arg === '--check') {
@@ -33,44 +39,75 @@ for (let i = 0; i < args.length; i++) {
   }
   if (arg === '--template' || arg === '--out') {
     if (i + 1 >= args.length) {
-      process.stderr.write(`ERROR: ${arg} requires a path\n${usage()}\n`);
+      process.stderr.write(`ERROR: ${arg} requires a path\n${usage()}`);
       process.exit(2);
     }
     if (arg === '--template') templatePath = resolve(args[++i]);
     else outputPath = resolve(args[++i]);
     continue;
   }
-  process.stderr.write(`ERROR: unknown argument: ${arg}\n${usage()}\n`);
+  process.stderr.write(`ERROR: unknown argument: ${arg}\n${usage()}`);
   process.exit(2);
 }
 
-let text;
+let template;
 try {
-  text = readFileSync(templatePath, 'utf8');
+  template = readFileSync(templatePath, 'utf8');
 } catch (error) {
   process.stderr.write(`ERROR: cannot read ${templatePath}: ${error.message}\n`);
   process.exit(1);
 }
 
-const names = new Set();
-for (const match of text.matchAll(PLACEHOLDER)) names.add(match[1]);
-
-const substituted = [];
-const missing = [];
-
-for (const name of names) {
+function lookup(name, fallback) {
   const value = process.env[name];
-  if (value === undefined || value === '') {
-    missing.push(name);
-    continue;
-  }
-  text = text.replaceAll('${' + name + '}', value);
-  substituted.push(`${name} (${value.length} chars)`);
+  if (value !== undefined && value !== '') return value;
+  if (fallback !== undefined) return fallback;
+  return null;
 }
 
-const unresolved = [...text.matchAll(PLACEHOLDER)]
-  .map((match) => match[1])
-  .filter((name) => !missing.includes(name));
+function render(text, missing) {
+  return text.replace(PLACEHOLDER, (whole, name, fallback) => {
+    const value = lookup(name, fallback);
+    if (value === null) {
+      if (!missing.includes(name)) missing.push(name);
+      return whole;
+    }
+    return value;
+  });
+}
+
+const substituted = new Set();
+const missing = [];
+const lines = [];
+
+for (const line of template.split('\n')) {
+  const commented = line.match(COMMENT);
+  if (commented !== null) {
+    const inner = commented[2];
+    const names = [...inner.matchAll(PLACEHOLDER)];
+    const resolvable = names.length > 0 && names.every(([, name, fallback]) => lookup(name, fallback) !== null);
+    if (!resolvable) {
+      lines.push(line);
+      continue;
+    }
+    lines.push(commented[1] + render(inner, missing));
+    for (const [, name] of names) substituted.add(name);
+    continue;
+  }
+  const names = [...line.matchAll(PLACEHOLDER)];
+  lines.push(render(line, missing));
+  for (const [, name] of names) substituted.add(name);
+}
+
+const text = lines.join('\n');
+const unresolved = [
+  ...new Set(
+    text
+      .split('\n')
+      .filter((line) => !COMMENT.test(line))
+      .flatMap((line) => [...line.matchAll(PLACEHOLDER)].map((match) => match[1])),
+  ),
+].filter((name) => !missing.includes(name));
 const leftoverToken = text.includes('REPLACE_WITH');
 const failed = missing.length > 0 || unresolved.length > 0 || leftoverToken;
 
@@ -78,7 +115,7 @@ if (missing.length > 0) process.stderr.write(`ERROR: missing or empty: ${missing
 if (unresolved.length > 0) process.stderr.write(`ERROR: unresolved: ${unresolved.join(', ')}\n`);
 if (leftoverToken) process.stderr.write('ERROR: REPLACE_WITH remains\n');
 
-process.stdout.write(`Substituted: ${substituted.length === 0 ? '(none)' : substituted.join(', ')}\n`);
+process.stdout.write(`Substituted: ${substituted.size === 0 ? '(none)' : [...substituted].join(', ')}\n`);
 process.stdout.write(`Missing: ${missing.length === 0 ? '(none)' : missing.join(', ')}\n`);
 
 const bytes = Buffer.byteLength(text, 'utf8');

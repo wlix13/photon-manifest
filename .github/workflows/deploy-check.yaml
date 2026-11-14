@@ -1,0 +1,57 @@
+name: 📦 Check deploy path
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  deploy-dry-run:
+    name: 📦 Deploy dry run
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Placeholder uuid: render needs the var, dry run never contacts Cloudflare.
+      D1_DATABASE_ID: 00000000-0000-0000-0000-000000000000
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          cache: pnpm
+          node-version: 24
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Render wrangler.jsonc
+        run: node scripts/render-wrangler.mjs
+
+      - name: Bundle production build
+        run: pnpm exec wrangler deploy --dry-run --env production
+
+  deploy-gate:
+    name: 📦 Deploy path passed
+    if: always()
+    needs: [deploy-dry-run]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail if deploy job did not pass
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "::error::deploy path check failed or was cancelled"
+          exit 1

@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "fflate": "^0.8.2",
-    "hono": "^4.13.17"
+    "hono": "^4.13.18"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.23.0",

@@ -277,7 +277,12 @@ const ADMIN_HTML = `<!doctype html>
   async function api(path, opts) {
     opts = opts || {};
     opts.credentials = "same-origin";
-    opts.headers = Object.assign({ Accept: "application/json" }, opts.headers || {});
+    var method = (opts.method || "GET").toUpperCase();
+    var headers = Object.assign({ Accept: "application/json" }, opts.headers || {});
+    if (method !== "GET" && method !== "HEAD" && !headers["Content-Type"]) {
+      headers["Content-Type"] = "application/json";
+    }
+    opts.headers = headers;
     var res = await fetch(path, opts);
     if (res.status === 401 || res.status === 403) {
       var e = new Error(res.status === 403 ? "forbidden" : "unauthorized");

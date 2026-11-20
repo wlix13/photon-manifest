@@ -6,6 +6,7 @@ import {
   generateToken,
   hashPassword,
   requireAuth,
+  requireJsonContentType,
 } from "../auth";
 import type { Role } from "../db";
 import {
@@ -36,6 +37,8 @@ const ROLES: readonly Role[] = ["read", "write", "admin"];
 const MIN_PASSWORD_LENGTH = 8;
 
 export const adminRoutes = new Hono<AppEnv>({ strict: false });
+
+adminRoutes.use("*", requireJsonContentType());
 
 /** Parses the request body as a JSON object, or fails with 400. */
 async function readJson(request: Request): Promise<Record<string, unknown>> {

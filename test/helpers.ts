@@ -76,11 +76,12 @@ export async function api(
   auth: string,
   body?: unknown,
 ): Promise<Response> {
+  const isMutating = ["POST", "PUT", "PATCH", "DELETE"].includes(method.toUpperCase());
   return SELF.fetch(`${BASE}${path}`, {
     method,
     headers: {
       Authorization: auth,
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(isMutating ? { "Content-Type": "application/json" } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });

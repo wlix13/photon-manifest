@@ -24,6 +24,11 @@ pnpm run db:migrate
 npx wrangler secret put ADMIN_USERNAME --env production
 npx wrangler secret put ADMIN_PASSWORD --env production
 
+# Optional: global cache purge on deletion (immediate in every data center)
+# npx wrangler secret put CLOUDFLARE_ZONE_ID --env production
+# npx wrangler secret put PURGE_API_TOKEN --env production
+# (PURGE_API_TOKEN needs Zone.Cache Purge permission; without both secrets the TTL bounds revocation.)
+
 pnpm run deploy
 ```
 

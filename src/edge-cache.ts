@@ -86,6 +86,29 @@ export async function purgeCachedFile(
       caches.default.delete(cacheKey(new URL(path, requestUrl).toString())),
     ),
   );
+
+  // Global purge via Cloudflare API when configured (best effort).
+  if (env.CLOUDFLARE_ZONE_ID && env.PURGE_API_TOKEN) {
+    const downloadUrl = new URL(base, requestUrl).toString();
+    const metadataUrl = new URL(`${base}.metadata`, requestUrl).toString();
+    const purgeUrl = `https://api.cloudflare.com/client/v4/zones/${env.CLOUDFLARE_ZONE_ID}/purge_cache`;
+    const body = JSON.stringify({ files: [downloadUrl, metadataUrl] });
+    try {
+      const response = await fetch(purgeUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.PURGE_API_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body,
+      });
+      if (!response.ok) {
+        console.error("global cache purge: non-OK status", response.status);
+      }
+    } catch (err) {
+      console.error("global cache purge failed:", errorString(err));
+    }
+  }
 }
 
 // Wraps a download handler with read-through edge caching. Must only run after

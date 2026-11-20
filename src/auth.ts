@@ -211,6 +211,22 @@ export async function authenticate(
   return { username: user.username, role: user.role, project: null, viaToken: false, anonymous: false };
 }
 
+/** Middleware: rejects non-GET/HEAD requests without application/json Content-Type.
+ * Browsers cannot send JSON from form, so this blocks cross-site form POSTs
+ * that would carry cached Basic credentials. */
+export function requireJsonContentType(): MiddlewareHandler<AppEnv> {
+  return async (c, next) => {
+    const method = c.req.method;
+    if (method === "GET" || method === "HEAD") return next();
+    const ct = c.req.raw.headers.get("Content-Type") ?? "";
+    const mediaType = ct.split(";")[0]?.trim().toLowerCase() ?? "";
+    if (mediaType !== "application/json") {
+      return c.json({ error: "Content-Type must be application/json" }, 400);
+    }
+    return next();
+  };
+}
+
 /** Middleware: authenticates the request and enforces a minimum role. */
 export function requireAuth(minimum: Role): MiddlewareHandler<AppEnv> {
   return async (c, next) => {

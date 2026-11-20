@@ -1,7 +1,7 @@
-import { env } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { fileKey } from "../src/storage";
-import { ADMIN, api, basicAuth, buildWheel, get, sha256Hex, uploadFile } from "./helpers";
+import { ADMIN, api, basicAuth, BASE, buildWheel, get, sha256Hex, uploadFile } from "./helpers";
 
 const JSON_ACCEPT = "application/vnd.pypi.simple.v1+json";
 const WHEEL = buildWheel("test_package", "1.0.0");
@@ -245,5 +245,88 @@ describe("download caching", () => {
     // Deleting through the API purges the cache, so the next read misses.
     await api("DELETE", `/api/projects/cached-pkg/files/${wheel.filename}`, ADMIN);
     expect((await get(url, { auth: ADMIN })).status).toBe(404);
+  });
+});
+
+describe("admin mutations require JSON content type", () => {
+  const admin = ADMIN;
+  const base = "/api/users";
+  const unyankWheel = buildWheel("test_pkg_unyank_text", "1.0.0");
+  const yankWheel = buildWheel("test_pkg_yank_text", "1.0.0");
+  const unyankJsonWheel = buildWheel("test_pkg_unyank_json", "1.0.0");
+
+  it("rejects POST with no Content-Type header", async () => {
+    const resp = await SELF.fetch(`${BASE}${base}`, {
+      method: "POST",
+      headers: { Authorization: admin },
+      body: JSON.stringify({ username: "x", password: "x-password-1", role: "write" }),
+    });
+    expect(resp.status).toBe(400);
+  });
+
+  it("rejects POST with text/plain Content-Type", async () => {
+    const resp = await SELF.fetch(`${BASE}${base}`, {
+      method: "POST",
+      headers: { Authorization: admin, "Content-Type": "text/plain" },
+      body: JSON.stringify({ username: "x", password: "x-password-1", role: "write" }),
+    });
+    expect(resp.status).toBe(400);
+  });
+
+  it("accepts POST with application/json Content-Type", async () => {
+    const resp = await api("POST", base, admin, { username: "json-user", password: "json-password-1", role: "write" });
+    expect(resp.status).toBe(201);
+  });
+
+  it("rejects DELETE with no Content-Type header", async () => {
+    const resp = await SELF.fetch(`${BASE}/api/projects/nonexistent`, {
+      method: "DELETE",
+      headers: { Authorization: admin },
+    });
+    expect(resp.status).toBe(400);
+  });
+
+  it("rejects DELETE with text/plain Content-Type", async () => {
+    const resp = await SELF.fetch(`${BASE}/api/projects/nonexistent`, {
+      method: "DELETE",
+      headers: { Authorization: admin, "Content-Type": "text/plain" },
+    });
+    expect(resp.status).toBe(400);
+  });
+
+  it("accepts DELETE with application/json Content-Type", async () => {
+    const resp = await api("DELETE", "/api/projects/nonexistent", admin);
+    expect(resp.status).toBe(404);
+  });
+
+  it("rejects unyank with text/plain Content-Type", async () => {
+    const uploadResp = await uploadFile(ADMIN, unyankWheel, { name: "test-pkg-unyank-text", version: "1.0.0" });
+    expect([200, 201]).toContain(uploadResp.status);
+    const resp = await SELF.fetch(`${BASE}/api/projects/test-pkg-unyank-text/files/${unyankWheel.filename}/unyank`, {
+      method: "POST",
+      headers: { Authorization: admin, "Content-Type": "text/plain" },
+      body: JSON.stringify({}),
+    });
+    expect(resp.status).toBe(400);
+  });
+
+  it("rejects yank with text/plain Content-Type", async () => {
+    const uploadResp = await uploadFile(ADMIN, yankWheel, { name: "test-pkg-yank-text", version: "1.0.0" });
+    expect([200, 201]).toContain(uploadResp.status);
+    const resp = await SELF.fetch(`${BASE}/api/projects/test-pkg-yank-text/files/${yankWheel.filename}/yank`, {
+      method: "POST",
+      headers: { Authorization: admin, "Content-Type": "text/plain" },
+      body: JSON.stringify({ reason: "test" }),
+    });
+    expect(resp.status).toBe(400);
+  });
+
+  it("accepts unyank with application/json Content-Type", async () => {
+    const uploadResp = await uploadFile(ADMIN, unyankJsonWheel, { name: "test-pkg-unyank-json", version: "1.0.0" });
+    expect([200, 201]).toContain(uploadResp.status);
+    const yankResp = await api("POST", `/api/projects/test-pkg-unyank-json/files/${unyankJsonWheel.filename}/yank`, admin, { reason: "test" });
+    expect(yankResp.status).toBe(200);
+    const resp = await api("POST", `/api/projects/test-pkg-unyank-json/files/${unyankJsonWheel.filename}/unyank`, admin);
+    expect(resp.status).toBe(200);
   });
 });

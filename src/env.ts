@@ -13,6 +13,10 @@ export interface Env {
   MAX_UPLOAD_MB?: string;
   /** Edge caching of downloads; "off" disables it (default on, custom domain only). */
   EDGE_CACHE?: "on" | "off";
+  /** Optional: Cloudflare zone ID for global cache purge on deletion. */
+  CLOUDFLARE_ZONE_ID?: string;
+  /** Optional: API token with Zone.Cache Purge permission for global cache purge. */
+  PURGE_API_TOKEN?: string;
 }
 
 /** Parses the configured PBKDF2 iteration count, falling back to the default. */

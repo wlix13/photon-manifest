@@ -112,6 +112,25 @@ curl -u bob -X POST $BASE/api/tokens \
 
 Notes: token creation requires password auth (a token cannot mint tokens), and tokens belong to database users - the bootstrap admin should create a real user for itself first.
 
+### Rate limiting
+
+Authentication accepts unlimited attempts: every guess against an existing username runs a PBKDF2-SHA256 verify at 100k iterations, so a caller can spend Worker CPU with no lockout.
+The Worker does no rate limiting itself, and none is planned in code: the edge is the right place, because a blocked request never reaches the isolate.
+Add one WAF rate limiting rule (Security -> WAF -> Rate limiting rules, or the Rulesets API) matching the credential endpoints:
+
+```
+expression          = http.request.uri.path matches "^/(api/tokens|legacy/)"
+action              = block
+period              = 10
+requests_per_period = 20
+mitigation_timeout  = 10
+characteristics     = ["ip.src"]
+```
+
+On the Free plan only one rule exists, the period is fixed at 10 seconds and the mitigation timeout at 10 seconds, so this is a burst guard rather than a per-account lockout.
+Business and higher allow five rules, counting characteristics beyond IP (for example a request header), and periods up to 10 minutes, which is where a real per-username lockout belongs.
+Note that an unknown username costs one D1 read and no hashing: only existing usernames pay the PBKDF2 verify, so the rule matters most against the bootstrap admin and known accounts.
+
 ## Client configuration
 
 Install:

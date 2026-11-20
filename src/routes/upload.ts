@@ -77,7 +77,7 @@ uploadRoutes.post("/", async (c) => {
     throw new BadRequest("Provide sha256_digest (or md5_digest).");
   }
 
-  const metadata = parsed.filetype === "bdist_wheel" ? extractWheelMetadata(bytes) : null;
+  const metadata = parsed.filetype === "bdist_wheel" ? await extractWheelMetadata(bytes) : null;
   const metadataSha256 = metadata !== null ? hex(await crypto.subtle.digest("SHA-256", metadata)) : null;
 
   const fileRecord = {

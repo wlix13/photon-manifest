@@ -1,6 +1,6 @@
 {
   "name": "photon-manifest",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Private PyPI-compatible package index on Cloudflare Workers (R2 + D1)",
   "type": "module",
   "private": true,
